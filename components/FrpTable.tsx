@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { frpApps, FrpApp } from "@/data/frpApps";
+import { frpApps, FrpApp } from "../data/frpApps";
 
 export default function FrpTable() {
   const [search, setSearch] = useState<string>("");
