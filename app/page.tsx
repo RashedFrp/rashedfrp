@@ -1,4 +1,4 @@
-import FrpTable from "@/components/FrpTable";
+import FrpTable from "../components/FrpTable";
 
 export default function Home() {
   return (
@@ -28,4 +28,5 @@ export default function Home() {
       </footer>
     </main>
   );
-}
+        }
+        
