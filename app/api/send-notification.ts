@@ -1,61 +1,71 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as admin from 'firebase-admin';
+import { NextResponse } from "next/server";
+import admin from "firebase-admin";
 
-// ফায়ারবেস অ্যাডমিন ইনিশিয়ালাইজেশন
+// ফায়ারবেস অ্যাডমিন এসডিকে ইনিশিয়ালাইজ করা (ডাবল ইনিশিয়ালাইজেশন এড়াতে চেক করা হয়)
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL, // tech-alpha-57fd1-এর সার্ভিস অ্যাকাউন্ট ইমেইল
-      privateKey: process.env.FIREBASE_PRIVATE_KEY 
-        ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') 
-        : undefined,
-    }),
-  });
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        // প্রাইভেট কে গুলোর ভেতরের নতুন লাইনগুলো ঠিক রাখার জন্য replace ব্যবহার করা হয়েছে
+        privateKey: process.env.FIREBASE_PRIVATE_KEY
+          ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n")
+          : undefined,
+      }),
+    });
+  } catch (error) {
+    console.error("Firebase admin initialization error:", error);
+  }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers সেট করা
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
-  const { token, title, body, url } = req.body;
-
-  if (!token) {
-    return res.status(400).json({ error: 'FCM Token is required' });
-  }
-
-  const message = {
-    token: token,
-    notification: {
-      title: title || 'নতুন পোস্ট প্রকাশিত হয়েছে!',
-      body: body || 'আমাদের ব্লগ সাইটে নতুন আপডেট দেখতে ভিজিট করুন।',
-    },
-    webpush: {
-      fcmOptions: {
-        link: url || 'https://yourblog.blogspot.com',
-      },
-    },
+export async function POST(request: Request) {
+  // CORS হেডার যুক্ত করা যাতে ব্লগার বা অন্য ডোমেন থেকে রিকোয়েস্ট ব্লক না হয়
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
   };
 
+  if (request.method === "OPTIONS") {
+    return new NextResponse(null, { status: 200, headers });
+  }
+
   try {
-    const response = await admin.messaging().send(message);
-    return res.status(200).json({ success: true, messageId: response });
+    const body = await request.json();
+    const { token, title, message, url } = body;
+
+    if (!token) {
+      return NextResponse.json(
+        { success: false, error: "FCM token is missing" },
+        { status: 400, headers }
+      );
+    }
+
+    const payload = {
+      token: token,
+      notification: {
+        title: title || "New Notification",
+        body: message || "You have a new update!",
+      },
+      webpush: {
+        fcmOptions: {
+          link: url || "https://rashedfrp.vercel.app/",
+        },
+      },
+    };
+
+    const response = await admin.messaging().send(payload);
+
+    return NextResponse.json(
+      { success: true, messageId: response },
+      { status: 200, headers }
+    );
   } catch (error: any) {
-    console.error('Error sending notification:', error);
-    return res.status(500).json({ error: 'Failed to send notification', details: error.message });
+    console.error("Error sending notification:", error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500, headers }
+    );
   }
 }
